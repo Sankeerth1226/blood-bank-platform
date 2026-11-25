@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>HemoPulse Command — Live Blood Bank, Cold-Chain & 30-Min Delivery</title>
+  <title>HemoPulse Command — Live Blood Bank, Booking, Payment & 30-Min Delivery</title>
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -22,13 +22,16 @@
         </div>
         <div>
           <h1 class="text-base font-extrabold text-white leading-tight">HemoPulse Command</h1>
-          <p class="text-[11px] text-slate-400">Live Blood Inventory &bull; Cold-Chain &bull; 30-Min GPS Tracking</p>
+          <p class="text-[11px] text-slate-400">Live Blood Inventory &bull; Booking &bull; UPI/Pay-Later &bull; 30-Min GPS</p>
         </div>
       </div>
-      <div class="flex items-center gap-2 text-xs">
+      <div class="flex flex-wrap items-center gap-2 text-xs">
         <span class="px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-semibold">
           Live GPS Telemetry Active
         </span>
+        <button id="btn-open-booking" type="button" class="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold transition">
+          Book Blood &amp; Pay
+        </button>
         <button id="btn-toggle-gps" type="button" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition">
           Pause GPS
         </button>
@@ -42,7 +45,7 @@
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 class="text-sm font-bold text-white">Live 30-Minute Emergency Courier Map (Hyderabad Grid)</h2>
-          <p class="text-xs text-slate-400">Route: NIMS Blood Bank (Punjagutta) &rarr; Apollo Hospitals (Jubilee Hills)</p>
+          <p id="active-route-label" class="text-xs text-slate-400">Route: NIMS Blood Bank (Punjagutta) &rarr; Apollo Hospitals (Jubilee Hills)</p>
         </div>
         <div class="grid grid-cols-3 gap-2 text-xs">
           <div class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5">
@@ -59,31 +62,257 @@
           </div>
         </div>
       </div>
-      <div id="delivery-map" style="height: 360px;" class="w-full"></div>
+      <div id="delivery-map" style="height: 340px;" class="w-full"></div>
     </section>
 
     <!-- Blood Stock Summary -->
     <section class="grid grid-cols-2 sm:grid-cols-4 gap-3" id="stock-cards"></section>
+
+    <!-- Blood Booking & Payment Workspace -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+      <!-- Blood Unit Reservation Form -->
+      <form id="booking-form" class="lg:col-span-6 bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-sm font-bold text-white">1. Blood Unit Booking &amp; Cold-Chain Reservation</h2>
+            <p class="text-xs text-slate-400">Reserve cross-matched units with sub-30-min dispatch</p>
+          </div>
+          <span class="text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">FIFO Ready</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div>
+            <label class="block text-slate-400 mb-1">Blood Group</label>
+            <select id="book-group" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white">
+              <option value="O-">O- (Universal Emergency)</option>
+              <option value="O+">O+</option>
+              <option value="A+">A+</option>
+              <option value="B+">B+</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Component</label>
+            <select id="book-component" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white">
+              <option value="Packed RBCs (2–6°C)">Packed RBCs (2–6°C)</option>
+              <option value="Whole Blood (2–6°C)">Whole Blood (2–6°C)</option>
+              <option value="Platelets (20–24°C)">Platelets (20–24°C)</option>
+              <option value="Fresh Frozen Plasma (≤-18°C)">Fresh Frozen Plasma (≤-18°C)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Units (₹1,450 / unit)</label>
+            <input id="book-units" type="number" min="1" max="10" value="2" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white" required />
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Destination Hospital</label>
+            <input id="book-hospital" type="text" value="Apollo Hospitals, Jubilee Hills" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white" required />
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs">
+          <span class="text-slate-400">Estimated Total (incl. Cold-Box Courier)</span>
+          <strong id="book-total" class="text-base font-extrabold text-white">₹2,900</strong>
+        </div>
+
+        <button type="submit" class="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition">
+          Confirm Blood Booking &amp; Proceed to Payment
+        </button>
+      </form>
+
+      <!-- Payment Checkout & Emergency Pay-Later -->
+      <div class="lg:col-span-6 bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-sm font-bold text-white">2. Fast UPI / Card Checkout &amp; Pay-Later Override</h2>
+            <p class="text-xs text-slate-400">Verified hospitals can dispatch immediately without payment delay</p>
+          </div>
+          <span id="pay-status-badge" class="text-[11px] px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold">
+            Pending Booking
+          </span>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2 text-xs">
+          <button type="button" data-method="UPI Intent / QR" class="pay-method-btn py-2 px-2.5 rounded-lg border border-indigo-500 bg-indigo-600/20 text-white font-semibold">
+            UPI / QR
+          </button>
+          <button type="button" data-method="Hospital Card" class="pay-method-btn py-2 px-2.5 rounded-lg border border-slate-700 bg-slate-950 text-slate-300 font-semibold">
+            Card / NEFT
+          </button>
+          <button type="button" data-method="SOS Pay-Later" class="pay-method-btn py-2 px-2.5 rounded-lg border border-amber-500/50 bg-amber-950/30 text-amber-300 font-semibold">
+            SOS Pay-Later
+          </button>
+        </div>
+
+        <div id="upi-input-box" class="text-xs">
+          <label class="block text-slate-400 mb-1">UPI ID / Hospital Billing Reference</label>
+          <input id="upi-id" type="text" value="apollo.trauma@icici" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white" />
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <button id="btn-pay-now" type="button" class="flex-1 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition">
+            Complete Payment
+          </button>
+          <button id="btn-pay-later" type="button" class="py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition">
+            Dispatch Now, Pay Later
+          </button>
+        </div>
+
+        <p id="payment-feedback" class="text-xs text-slate-400 min-h-[18px]">
+          Select blood units on the left, then pay via UPI/Card or trigger SOS Pay-Later.
+        </p>
+      </div>
+    </section>
+
+    <!-- Active Bookings & Dispatch Ledger -->
+    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-bold text-white">Active Bookings &amp; Dispatch Ledger</h2>
+        <span class="text-xs text-slate-400" id="ledger-count">1 Active Dispatch</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="text-slate-400 border-b border-slate-800">
+            <tr>
+              <th class="py-2 pr-3">Booking ID</th>
+              <th class="py-2 pr-3">Blood &amp; Component</th>
+              <th class="py-2 pr-3">Hospital</th>
+              <th class="py-2 pr-3">Amount</th>
+              <th class="py-2 pr-3">Payment Mode</th>
+              <th class="py-2">Dispatch Status</th>
+            </tr>
+          </thead>
+          <tbody id="ledger-body" class="divide-y divide-slate-800/70">
+            <tr>
+              <td class="py-2.5 pr-3 font-mono text-sky-400">HP-8841</td>
+              <td class="py-2.5 pr-3">O- &bull; Packed RBCs (2 units)</td>
+              <td class="py-2.5 pr-3">Apollo Hospitals, Jubilee Hills</td>
+              <td class="py-2.5 pr-3 font-mono">₹2,900</td>
+              <td class="py-2.5 pr-3 text-emerald-400">UPI Verified</td>
+              <td class="py-2.5"><span class="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-semibold">En-Route (GPS Active)</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </main>
 
   <script>
+    const UNIT_PRICE = 1450;
     const stock = [
       { group: 'O-', units: 6, temp: '3.9°C', alert: true },
       { group: 'O+', units: 35, temp: '4.1°C', alert: false },
       { group: 'A+', units: 19, temp: '4.0°C', alert: false },
       { group: 'B+', units: 37, temp: '3.8°C', alert: false }
     ];
-    document.getElementById('stock-cards').innerHTML = stock.map(s => `
-      <div class="bg-slate-900 border ${s.alert ? 'border-red-500/60' : 'border-slate-800'} rounded-xl p-4">
-        <div class="flex items-center justify-between">
-          <span class="text-lg font-black text-white">${s.group}</span>
-          <span class="text-[10px] px-2 py-0.5 rounded font-bold ${s.alert ? 'bg-red-600 text-white' : 'bg-emerald-950 text-emerald-300'}">${s.alert ? 'LOW STOCK' : 'AVAILABLE'}</span>
-        </div>
-        <div class="text-2xl font-extrabold text-white mt-2">${s.units} <span class="text-xs font-normal text-slate-400">units</span></div>
-        <div class="text-[11px] text-slate-400 mt-1">Vault Temp: <strong class="text-emerald-400">${s.temp}</strong></div>
-      </div>
-    `).join('');
 
+    function renderStock() {
+      document.getElementById('stock-cards').innerHTML = stock.map(s => `
+        <div class="bg-slate-900 border ${s.alert || s.units <= 8 ? 'border-red-500/60' : 'border-slate-800'} rounded-xl p-4">
+          <div class="flex items-center justify-between">
+            <span class="text-lg font-black text-white">${s.group}</span>
+            <span class="text-[10px] px-2 py-0.5 rounded font-bold ${s.alert || s.units <= 8 ? 'bg-red-600 text-white' : 'bg-emerald-950 text-emerald-300'}">${s.alert || s.units <= 8 ? 'LOW STOCK' : 'AVAILABLE'}</span>
+          </div>
+          <div class="text-2xl font-extrabold text-white mt-2">${s.units} <span class="text-xs font-normal text-slate-400">units</span></div>
+          <div class="text-[11px] text-slate-400 mt-1">Vault Temp: <strong class="text-emerald-400">${s.temp}</strong></div>
+        </div>
+      `).join('');
+    }
+    renderStock();
+
+    // Booking & Payment State
+    let currentBooking = null;
+    let selectedMethod = 'UPI Intent / QR';
+    const unitsInput = document.getElementById('book-units');
+    const totalEl = document.getElementById('book-total');
+
+    function updateTotalPreview() {
+      const u = Math.max(1, parseInt(unitsInput.value || '1', 10));
+      totalEl.textContent = `₹${(u * UNIT_PRICE).toLocaleString('en-IN')}`;
+    }
+    unitsInput.addEventListener('input', updateTotalPreview);
+    document.getElementById('btn-open-booking').addEventListener('click', () => {
+      document.getElementById('booking-form').scrollIntoView({ behavior: 'smooth' });
+    });
+
+    document.querySelectorAll('.pay-method-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        selectedMethod = btn.dataset.method;
+        document.querySelectorAll('.pay-method-btn').forEach(b => {
+          b.className = 'pay-method-btn py-2 px-2.5 rounded-lg border border-slate-700 bg-slate-950 text-slate-300 font-semibold';
+        });
+        btn.className = 'pay-method-btn py-2 px-2.5 rounded-lg border border-indigo-500 bg-indigo-600/20 text-white font-semibold';
+        document.getElementById('upi-input-box').style.display = selectedMethod === 'SOS Pay-Later' ? 'none' : 'block';
+      });
+    });
+
+    document.getElementById('booking-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const group = document.getElementById('book-group').value;
+      const component = document.getElementById('book-component').value;
+      const units = Math.max(1, parseInt(unitsInput.value, 10));
+      const hospital = document.getElementById('book-hospital').value.trim() || 'Apollo Hospitals, Jubilee Hills';
+      const item = stock.find(s => s.group === group);
+
+      if (!item || item.units < units) {
+        document.getElementById('payment-feedback').textContent = `Insufficient ${group} units (${item ? item.units : 0} available). Lower unit count or pick another group.`;
+        document.getElementById('payment-feedback').className = 'text-xs text-red-400';
+        return;
+      }
+
+      item.units -= units;
+      renderStock();
+
+      currentBooking = {
+        id: 'HP-' + Math.floor(1000 + Math.random() * 9000),
+        group,
+        component,
+        units,
+        hospital,
+        amount: units * UNIT_PRICE
+      };
+
+      document.getElementById('active-route-label').textContent = `Route: NIMS Blood Bank (Punjagutta) → ${hospital}`;
+      document.getElementById('pay-status-badge').textContent = `Reserved (${currentBooking.id})`;
+      document.getElementById('pay-status-badge').className = 'text-[11px] px-2.5 py-1 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-semibold';
+      document.getElementById('payment-feedback').textContent = `Reserved ${units}x ${group} (${component}) for ${hospital} — Total ₹${currentBooking.amount.toLocaleString('en-IN')}.`;
+      document.getElementById('payment-feedback').className = 'text-xs text-sky-300';
+    });
+
+    function finalizeDispatch(modeLabel, statusLabel) {
+      if (!currentBooking) {
+        document.getElementById('payment-feedback').textContent = 'Please complete Step 1 (Confirm Blood Booking) first.';
+        document.getElementById('payment-feedback').className = 'text-xs text-amber-400';
+        return;
+      }
+      const tbody = document.getElementById('ledger-body');
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td class="py-2.5 pr-3 font-mono text-sky-400">${currentBooking.id}</td>
+        <td class="py-2.5 pr-3">${currentBooking.group} &bull; ${currentBooking.component.split(' (')[0]} (${currentBooking.units} units)</td>
+        <td class="py-2.5 pr-3">${currentBooking.hospital}</td>
+        <td class="py-2.5 pr-3 font-mono">₹${currentBooking.amount.toLocaleString('en-IN')}</td>
+        <td class="py-2.5 pr-3 text-emerald-400">${modeLabel}</td>
+        <td class="py-2.5"><span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold">${statusLabel}</span></td>
+      `;
+      tbody.prepend(row);
+      document.getElementById('ledger-count').textContent = `${tbody.children.length} Active Dispatches`;
+      document.getElementById('pay-status-badge').textContent = modeLabel;
+      document.getElementById('pay-status-badge').className = 'text-[11px] px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-semibold';
+      document.getElementById('payment-feedback').textContent = `${currentBooking.id} dispatched with live GPS tracking (${modeLabel}).`;
+      document.getElementById('payment-feedback').className = 'text-xs text-emerald-400';
+      currentBooking = null;
+    }
+
+    document.getElementById('btn-pay-now').addEventListener('click', () => {
+      const ref = document.getElementById('upi-id').value.trim() || 'Verified Payment';
+      finalizeDispatch(`${selectedMethod} (${ref})`, 'Dispatched & Paid');
+    });
+
+    document.getElementById('btn-pay-later').addEventListener('click', () => {
+      finalizeDispatch('Emergency Pay-Later Approved', 'SOS Dispatched (Pay-Later)');
+    });
+
+    // Live GPS Map
     const route = [
       [17.4205, 78.4540],
       [17.4220, 78.4495],
